@@ -127,30 +127,34 @@ west build -p -b holyiot_21011 knife_sharpening/firmware/diag
 - `ESP32-S3_16MB_8R_nRF52_SWD`: ESP32-S3 DevKitC, SWD на GPIO 41/42, 16 МБ flash.
 
 У SuperMini выведены только GPIO 1–13 и 43/44, а flash у неё 4 МБ, так что ни одна не
-подходит. Добавьте в конец `platformio.ini` флэшера своё окружение:
+подходит. Используется своё окружение (добавить в конец `platformio.ini` флэшера):
 
 ```ini
 [env:ESP32-S3_SuperMini_nRF52_SWD]
 board = esp32-s3-devkitc-1
-board_build.flash_size = 4MB
 board_upload.flash_size = 4MB
-board_build.partitions = partition_noOTA.csv   ; есть в репозитории флэшера, рассчитан на 4 МБ
+board_build.partitions = partition_S3_4MB.csv
 build_flags =
-    ; Serial через встроенный USB (на SuperMini нет отдельного USB-UART)
     -D ARDUINO_USB_MODE=1
     -D ARDUINO_USB_CDC_ON_BOOT=1
     ; PINS
     -D LED=48
     -D LED_STATE_ON=LOW
-    -D GLITCHER=4        ; нужен только для обхода APPROTECT глитчем, нам не нужен
-    -D OSCI_PIN=5        ; то же
-    -D NRF_POWER=6       ; то же, не подключать
-    -D swd_clock_pin=7
-    -D swd_data_pin=8
+    -D GLITCHER=6
+    -D OSCI_PIN=8
+    -D NRF_POWER=7
+    -D swd_clock_pin=4
+    -D swd_data_pin=5
 ```
 
-Подойдут любые свободные GPIO из 1–13, кроме GPIO 3 (strapping-пин). GPIO 19/20 на S3
-заняты USB.
+и таблица разделов `partition_S3_4MB.csv` (рядом с `platformio.ini`), ровно 4 МБ:
+
+```
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x5000
+app0,     app,  factory, 0x10000,  0x180000
+spiffs,   data, spiffs,  0x190000, 0x270000
+```
 
 Сборка и заливка флэшера (VS Code + PlatformIO):
 1. В `src/web.cpp` впишите `ssid` и `password` своей Wi-Fi сети.
@@ -161,22 +165,29 @@ build_flags =
 4. Откройте `http://swd.local/edit` (логин и пароль `admin`/`admin`), загрузите файл
    `data/index.htm` из репозитория флэшера и обновите `http://swd.local/`.
 5. На странице `http://swd.local/pins` видно, на каких пинах реально работает SWD.
-   Если флэшер уже был собран раньше, назначенные пины проще всего узнать здесь.
 
 ### Подключение
 
 | nRF52 (площадки на плате) | ESP32-S3 SuperMini |
 |---|---|
-| SWDCLK (T4) | GPIO 7 (`swd_clock_pin`) |
-| SWDIO (T3) | GPIO 8 (`swd_data_pin`) |
+| SWDCLK (T4) | GPIO 4 (`swd_clock_pin`) |
+| SWDIO (T3) | GPIO 5 (`swd_data_pin`) |
 | GND (T2) | GND |
-| VDD (T1) | 3V3, **только если батарейка вынута** |
+| VDD (T1) | **вариант Б**: GPIO 7 (`NRF_POWER`), только без батарейки |
 
-Провода SWD должны быть короткими (до 10–15 см).
+GPIO 6 (`GLITCHER`) и GPIO 8 (`OSCI_PIN`) не подключаются: они нужны только для обхода
+APPROTECT глитчем. Провода SWD должны быть короткими (до 10–15 см).
 
-> ⚠️ Нельзя одновременно подавать 3.3 В на VDD и держать CR2032 в держателе: внешние
-> 3.3 В пойдут в литиевую батарейку (её нельзя заряжать). Либо батарейка, либо 3V3
-> от SuperMini, но не вместе.
+Питание платы во время прошивки, выбрать одно из двух:
+- **А. От CR2032.** VDD (T1) никуда не подключать.
+- **Б. От GPIO 7 флэшера, батарейка вынута.** Флэшер при старте выставляет GPIO 7 в HIGH
+  (3.3 В), а кнопки **Power OFF / Power ON** в веб-интерфейсе передёргивают питание nRF.
+  Это удобно для перезапуска и проверки старта после «установки батарейки». nRF52810 с
+  радио потребляет до ~10 мА, GPIO ESP32-S3 это выдерживает.
+
+> ⚠️ Нельзя подавать питание на VDD (от GPIO 7 или 3V3) и одновременно держать CR2032 в
+> держателе: ток пойдёт в литиевую батарейку (её нельзя заряжать). И наоборот: если стоит
+> батарейка, GPIO 7 к VDD не подключать.
 
 ### Шаги в веб-интерфейсе флэшера
 
