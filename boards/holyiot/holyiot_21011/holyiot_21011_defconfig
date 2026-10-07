@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# 32 кГц: по умолчанию внутренний RC-генератор (работает всегда).
-# Кварц 32.768 кГц на схеме есть (P0.00/P0.01), но установлен ли он на 21011,
-# проверяет диагностическая прошивка (этап 0). Если да, в prj.conf приложения
-# можно переключить на CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y.
-CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
+# 32 кГц: кварц 32.768 кГц на P0.00/P0.01. На 21011 v1.0 он установлен (проверено
+# диагностикой, этап 0: «X1», 3215 тиков за 100 мс по RC-шкале). Допуск берём с запасом.
+CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
+CONFIG_CLOCK_CONTROL_NRF_K32SRC_50PPM=y
 
 CONFIG_ARM_MPU=y
 CONFIG_GPIO=y
