@@ -1,0 +1,5 @@
+# Holyiot 21011 board configuration
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_HOLYIOT_21011
+	select SOC_NRF52810_QFAA

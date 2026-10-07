@@ -1,0 +1,13 @@
+identifier: holyiot_21011
+name: Holyiot 21011
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+supported:
+  - gpio
+  - spi
+  - adc
+ram: 24
+flash: 192
+vendor: holyiot

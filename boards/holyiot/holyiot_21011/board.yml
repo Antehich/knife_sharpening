@@ -1,0 +1,6 @@
+board:
+  name: holyiot_21011
+  full_name: Holyiot 21011 (nRF52810 + LIS2DH12)
+  vendor: holyiot
+  socs:
+  - name: nrf52810
