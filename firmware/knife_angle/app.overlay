@@ -1,0 +1,24 @@
+/ {
+	zephyr,user {
+		io-channels = <&adc 0>;
+	};
+};
+
+/* Канал 0 SAADC: напряжение питания VDD (батарея), шкала 0..3.6 В. */
+&adc {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_6";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)>;
+		zephyr,input-positive = <NRF_SAADC_VDD>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&wdt0 {
+	status = "okay";
+};
