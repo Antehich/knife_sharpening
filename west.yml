@@ -1,0 +1,19 @@
+# Манифест west: Zephyr 4.4.2 и только нужные модули (Nordic HAL, CMSIS, mbedTLS для BLE).
+manifest:
+  self:
+    path: knife_sharpening
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.4.2
+      import:
+        name-allowlist:
+          - cmsis_6
+          - hal_nordic
+          - mbedtls
+          - tf-psa-crypto

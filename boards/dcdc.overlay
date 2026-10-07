@@ -1,0 +1,4 @@
+/* Включить DC/DC, только если на плате установлены дроссели у вывода DCC (L 10 мкГн + 15 нГн). */
+&reg {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
