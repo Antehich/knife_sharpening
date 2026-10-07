@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2937">
+<title>KnifeAngle</title>
+<style>
+  :root {
+    --bg-idle: #1f2937;
+    --bg-gray: #4b5563;
+    --bg-green: #15803d;
+    --bg-yellow: #eab308;
+    --bg-red: #b91c1c;
+    --fg: #ffffff;
+    --fg-on-yellow: #1c1917;
+    --card: rgba(0, 0, 0, 0.28);
+    --card-border: rgba(255, 255, 255, 0.18);
+    --input-bg: rgba(255, 255, 255, 0.12);
+    --accent: #ffffff;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--bg-idle);
+    color: var(--fg);
+    transition: background-color 0.25s ease, color 0.25s ease;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+
+  body.st-gray   { background: var(--bg-gray); }
+  body.st-green  { background: var(--bg-green); }
+  body.st-yellow { background: var(--bg-yellow); color: var(--fg-on-yellow); }
+  body.st-red    { background: var(--bg-red); }
+  body.st-yellow { --card: rgba(255, 255, 255, 0.35); --card-border: rgba(0, 0, 0, 0.2);
+                   --input-bg: rgba(255, 255, 255, 0.6); --accent: #1c1917; }
+
+  @media (prefers-reduced-motion: reduce) {
+    body { transition: none; }
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    flex-wrap: wrap;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #9ca3af;
+    flex: none;
+  }
+  .dot.on { background: #4ade80; box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.3); }
+  .dot.busy { background: #fbbf24; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+
+  #statusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #battery { font-size: 14px; opacity: 0.9; white-space: nowrap; }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-height: 44px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary {
+    background: var(--accent);
+    color: var(--bg-idle);
+    border-color: transparent;
+    font-weight: 600;
+  }
+  body.st-yellow button.primary { color: #fef9c3; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+
+  main {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8px 0 16px;
+  }
+
+  #angle {
+    font-size: min(30vw, 34vh, 260px);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  #angle.stale { opacity: 0.4; }
+
+  #hint {
+    margin-top: 12px;
+    font-size: clamp(20px, 6vw, 34px);
+    font-weight: 600;
+    min-height: 1.3em;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  #arrow { font-size: 1.4em; line-height: 1; }
+  #delta {
+    font-size: clamp(16px, 4.5vw, 24px);
+    font-weight: 500;
+    opacity: 0.9;
+    font-variant-numeric: tabular-nums;
+  }
+  #targetLine { margin-top: 6px; font-size: 16px; opacity: 0.85; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    display: grid;
+    gap: 14px;
+    width: 100%;
+    max-width: 560px;
+    align-self: center;
+  }
+
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row label.name { min-width: 112px; font-weight: 600; }
+
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper button { width: 44px; padding: 0; font-size: 22px; }
+
+  input[type=text] {
+    font: inherit;
+    font-size: 20px;
+    width: 92px;
+    text-align: center;
+    color: inherit;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 8px;
+    min-height: 44px;
+  }
+  .unit { opacity: 0.8; }
+
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .presets button { min-width: 56px; }
+  .presets button.active { background: var(--accent); color: var(--bg-idle); font-weight: 700; }
+  body.st-yellow .presets button.active { color: #fef9c3; }
+
+  .options { display: flex; gap: 16px; flex-wrap: wrap; font-size: 15px; }
+  .options label { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+  .options input { width: 20px; height: 20px; accent-color: #60a5fa; }
+
+  #calibrate { width: 100%; font-weight: 600; }
+
+  .msg {
+    font-size: 14px;
+    opacity: 0.9;
+    line-height: 1.4;
+  }
+  .msg.error { color: #fecaca; font-weight: 600; }
+  body.st-yellow .msg.error { color: #7f1d1d; }
+
+  #unsupported {
+    display: none;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin: 8px 0 16px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status" role="status" aria-live="polite">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">Не подключено</span>
+  </div>
+  <span id="battery" hidden></span>
+  <button id="connect" class="primary" type="button">Подключиться</button>
+</header>
+
+<div id="unsupported">
+  <b>Этот браузер не поддерживает Web Bluetooth.</b><br>
+  Откройте страницу в Chrome на Android, Windows, macOS или Linux по адресу <b>https://</b>
+  (или <b>http://localhost</b>). На iPhone/iPad Safari Web Bluetooth не поддерживает:
+  используйте браузер <b>Bluefy</b>.
+</div>
+
+<main>
+  <p id="angle" aria-live="off">--.-°</p>
+  <div id="hint" aria-live="polite"><span id="arrow"></span><span id="hintText"></span><span id="delta"></span></div>
+  <div id="targetLine"></div>
+</main>
+
+<section class="panel" aria-label="Настройки">
+  <div class="row">
+    <label class="name" for="target">Целевой угол</label>
+    <div class="stepper">
+      <button type="button" id="targetMinus" aria-label="Уменьшить на 0.5°">−</button>
+      <input type="text" id="target" inputmode="decimal" autocomplete="off" value="15.0" aria-describedby="targetLine">
+      <button type="button" id="targetPlus" aria-label="Увеличить на 0.5°">+</button>
+    </div>
+    <span class="unit">°</span>
+  </div>
+  <div class="presets" id="presets" role="group" aria-label="Пресеты угла">
+    <button type="button" data-v="15">15°</button>
+    <button type="button" data-v="17">17°</button>
+    <button type="button" data-v="20">20°</button>
+    <button type="button" data-v="25">25°</button>
+    <button type="button" data-v="30">30°</button>
+  </div>
+  <div class="row">
+    <label class="name" for="tol">Допуск ±</label>
+    <div class="stepper">
+      <button type="button" id="tolMinus" aria-label="Уменьшить допуск на 0.1°">−</button>
+      <input type="text" id="tol" inputmode="decimal" autocomplete="off" value="1.0">
+      <button type="button" id="tolPlus" aria-label="Увеличить допуск на 0.1°">+</button>
+    </div>
+    <span class="unit">°</span>
+  </div>
+  <button type="button" id="calibrate" disabled>Калибровать (нож плашмя на камне)</button>
+  <div class="options">
+    <label><input type="checkbox" id="optSound"> Звук при входе в цель</label>
+    <label><input type="checkbox" id="optVibro"> Вибрация</label>
+    <label><input type="checkbox" id="optWake"> Не гасить экран</label>
+  </div>
+  <div class="msg" id="msg"></div>
+</section>
+
+<script>
+'use strict';
+
+/* ---- Протокол устройства (см. README, раздел «Этап 1 → BLE») ---- */
+const DEVICE_NAME = 'KnifeAngle';
+const SVC_UUID = '8c900001-4d19-4014-a48c-3f940a276aeb';
+const ANGLE_UUID = '8c900002-4d19-4014-a48c-3f940a276aeb';
+const CMD_UUID = '8c900003-4d19-4014-a48c-3f940a276aeb';
+const CMD_CALIBRATE = 0x01;
+const FLAG_CALIBRATED = 0x01;
+const FLAG_SENSOR_ERROR = 0x02;
+
+/* ---- Логика индикации ---- */
+const HYSTERESIS = 0.3;   // выход из цели при |Δ| > допуск + 0.3°
+const NEAR_ZONE = 3;      // «близко»: до 3° за пределами допуска
+const STALE_MS = 1500;    // нет notify дольше: данные устарели
+const DEFAULTS = { target: 15, tol: 1, sound: false, vibro: false, wake: false };
+
+const $ = (id) => document.getElementById(id);
+const ui = {
+  dot: $('dot'), statusText: $('statusText'), battery: $('battery'), connect: $('connect'),
+  angle: $('angle'), arrow: $('arrow'), hintText: $('hintText'), delta: $('delta'),
+  targetLine: $('targetLine'), target: $('target'), tol: $('tol'), presets: $('presets'),
+  calibrate: $('calibrate'), optSound: $('optSound'), optVibro: $('optVibro'),
+  optWake: $('optWake'), msg: $('msg'), unsupported: $('unsupported'),
+};
+
+/* ---- Настройки в localStorage (страница работает и без него) ---- */
+const STORE_KEY = 'knifeAngle.settings.v1';
+
+function loadSettings() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {};
+  } catch (e) {
+    saved = {};
+  }
+  const s = { ...DEFAULTS, ...saved };
+  s.target = clamp(num(s.target, DEFAULTS.target), 0, 90);
+  s.tol = clamp(num(s.tol, DEFAULTS.tol), 0.1, 10);
+  s.sound = !!s.sound;
+  s.vibro = !!s.vibro;
+  s.wake = !!s.wake;
+  return s;
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    /* приватный режим или хранилище запрещено: настройки живут до перезагрузки */
+  }
+}
+
+function num(v, fallback) {
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clamp(v, lo, hi) {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function round1(v) {
+  return Math.round(v * 10) / 10;
+}
+
+const settings = loadSettings();
+
+/* ---- Состояние ---- */
+const state = {
+  connected: false,
+  angle: null,        // градусы
+  flags: 0,
+  lastUpdate: 0,
+  inTarget: false,
+  battery: null,
+};
+
+/* ---- Звук и вибрация ---- */
+let audioCtx = null;
+
+function unlockAudio() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  try {
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {
+    audioCtx = null;
+  }
+}
+
+// WebAudio можно запустить только после жеста пользователя.
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
+document.addEventListener('keydown', unlockAudio);
+
+function beep() {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 880;
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.4, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.16);
+}
+
+function onEnterTarget() {
+  if (settings.sound) beep();
+  if (settings.vibro && navigator.vibrate) {
+    try { navigator.vibrate(120); } catch (e) { /* не поддерживается */ }
+  }
+}
+
+/* ---- Блокировка гашения экрана ---- */
+let wakeLock = null;
+
+async function updateWakeLock() {
+  const want = settings.wake && state.connected && document.visibilityState === 'visible';
+  if (want && !wakeLock && 'wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) {
+      wakeLock = null;
+    }
+  } else if (!want && wakeLock) {
+    try { await wakeLock.release(); } catch (e) { /* уже снята */ }
+    wakeLock = null;
+  }
+}
+
+document.addEventListener('visibilitychange', updateWakeLock);
+
+/* ---- Отрисовка ---- */
+function setBodyState(name) {
+  document.body.className = name ? 'st-' + name : '';
+}
+
+function render() {
+  const now = performance.now();
+  const fresh = state.connected && state.angle !== null && now - state.lastUpdate < STALE_MS;
+  const calibrated = (state.flags & FLAG_CALIBRATED) !== 0;
+  const sensorError = (state.flags & FLAG_SENSOR_ERROR) !== 0;
+
+  ui.angle.textContent = state.angle === null ? '--.-°' : state.angle.toFixed(1) + '°';
+  ui.angle.classList.toggle('stale', !fresh);
+  ui.targetLine.textContent = `Цель ${fmt(settings.target)}° ± ${fmt(settings.tol)}°`;
+  ui.calibrate.disabled = !state.connected;
+
+  let arrow = '';
+  let text = '';
+  let delta = '';
+
+  if (!state.connected) {
+    setBodyState('');
+    state.inTarget = false;
+  } else if (sensorError) {
+    setBodyState('gray');
+    text = 'Ошибка датчика: выключите и включите устройство';
+    state.inTarget = false;
+  } else if (!fresh) {
+    setBodyState('gray');
+    text = 'Нет данных от датчика';
+    state.inTarget = false;
+  } else if (!calibrated) {
+    setBodyState('gray');
+    text = 'Сначала откалибруй (нож плашмя на камне)';
+    state.inTarget = false;
+  } else {
+    // Сравнение в целых десятых градуса: без ошибок округления на границах
+    // (в float 16.3 − 15 = 1.3000000000000007).
+    const d10 = Math.round(state.angle * 10) - Math.round(settings.target * 10);
+    const ad10 = Math.abs(d10);
+    const tol10 = Math.round(settings.tol * 10);
+    const d = d10 / 10;
+    const ad = ad10 / 10;
+    const wasIn = state.inTarget;
+
+    // Гистерезис: вход по допуску, выход при превышении допуска + 0.3°.
+    state.inTarget = wasIn ? ad10 <= tol10 + Math.round(HYSTERESIS * 10) : ad10 <= tol10;
+    if (state.inTarget && !wasIn) onEnterTarget();
+
+    if (state.inTarget) {
+      setBodyState('green');
+      arrow = '✓';
+      text = 'В цели';
+    } else {
+      setBodyState(ad10 <= tol10 + Math.round(NEAR_ZONE * 10) ? 'yellow' : 'red');
+      if (d < 0) {
+        arrow = '▲';
+        text = 'наклони больше';
+      } else {
+        arrow = '▼';
+        text = 'наклони меньше';
+      }
+    }
+    delta = `Δ ${d >= 0 ? '+' : '−'}${fmt(ad)}°`;
+  }
+
+  ui.arrow.textContent = arrow;
+  ui.hintText.textContent = text;
+  ui.delta.textContent = delta;
+
+  if (state.battery !== null && state.connected) {
+    ui.battery.hidden = false;
+    ui.battery.textContent = `🔋 ${state.battery}%`;
+  } else {
+    ui.battery.hidden = true;
+  }
+
+  for (const b of ui.presets.querySelectorAll('button')) {
+    b.classList.toggle('active', Math.abs(parseFloat(b.dataset.v) - settings.target) < 0.05);
+  }
+}
+
+function fmt(v) {
+  return round1(v).toFixed(1);
+}
+
+function setStatus(text, kind) {
+  ui.statusText.textContent = text;
+  ui.dot.className = 'dot' + (kind ? ' ' + kind : '');
+}
+
+function setMsg(text, isError) {
+  ui.msg.textContent = text || '';
+  ui.msg.className = 'msg' + (isError ? ' error' : '');
+}
+
+/* ---- Настройки: ввод ---- */
+function applyTarget(v) {
+  settings.target = clamp(round1(num(v, settings.target)), 0, 90);
+  ui.target.value = fmt(settings.target);
+  state.inTarget = false;
+  saveSettings();
+  render();
+}
+
+function applyTol(v) {
+  settings.tol = clamp(round1(num(v, settings.tol)), 0.1, 10);
+  ui.tol.value = fmt(settings.tol);
+  state.inTarget = false;
+  saveSettings();
+  render();
+}
+
+ui.target.addEventListener('change', () => applyTarget(ui.target.value));
+ui.tol.addEventListener('change', () => applyTol(ui.tol.value));
+$('targetMinus').addEventListener('click', () => applyTarget(settings.target - 0.5));
+$('targetPlus').addEventListener('click', () => applyTarget(settings.target + 0.5));
+$('tolMinus').addEventListener('click', () => applyTol(settings.tol - 0.1));
+$('tolPlus').addEventListener('click', () => applyTol(settings.tol + 0.1));
+ui.presets.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b) applyTarget(b.dataset.v);
+});
+
+for (const [el, key] of [[ui.optSound, 'sound'], [ui.optVibro, 'vibro'], [ui.optWake, 'wake']]) {
+  el.checked = settings[key];
+  el.addEventListener('change', () => {
+    settings[key] = el.checked;
+    saveSettings();
+    if (key === 'sound' && el.checked) {
+      unlockAudio();
+      beep();
+    }
+    if (key === 'vibro' && el.checked && !navigator.vibrate) {
+      setMsg('Вибрация в этом браузере не поддерживается.');
+    }
+    updateWakeLock();
+  });
+}
+
+ui.target.value = fmt(settings.target);
+ui.tol.value = fmt(settings.tol);
+
+/* ---- Bluetooth ---- */
+let device = null;
+let angleChar = null;
+let cmdChar = null;
+let userDisconnect = false;
+let reconnectTimer = null;
+let reconnectAttempt = 0;
+let connecting = false;
+
+function onAngleChanged(event) {
+  const v = event.target.value;
+  if (v.byteLength < 3) return;
+  state.angle = v.getInt16(0, true) / 10;
+  state.flags = v.getUint8(2);
+  state.lastUpdate = performance.now();
+  render();
+}
+
+function onBatteryChanged(event) {
+  state.battery = event.target.value.getUint8(0);
+  render();
+}
+
+async function connectGatt() {
+  if (connecting) return;
+  connecting = true;
+  setStatus('Подключение…', 'busy');
+  try {
+    const server = await device.gatt.connect();
+    if (userDisconnect) {
+      // Пока шло подключение, пользователь нажал «Отменить».
+      device.gatt.disconnect();
+      return;
+    }
+    const svc = await server.getPrimaryService(SVC_UUID);
+    angleChar = await svc.getCharacteristic(ANGLE_UUID);
+    cmdChar = await svc.getCharacteristic(CMD_UUID);
+
+    // Присваивание, а не addEventListener: при переподключении обработчик не дублируется.
+    angleChar.oncharacteristicvaluechanged = onAngleChanged;
+    await angleChar.startNotifications();
+    onAngleChanged({ target: { value: await angleChar.readValue() } });
+
+    try {
+      const bas = await server.getPrimaryService('battery_service');
+      const lvl = await bas.getCharacteristic('battery_level');
+      lvl.oncharacteristicvaluechanged = onBatteryChanged;
+      onBatteryChanged({ target: { value: await lvl.readValue() } });
+      await lvl.startNotifications();
+    } catch (e) {
+      state.battery = null; /* батарея не обязательна */
+    }
+
+    state.connected = true;
+    reconnectAttempt = 0;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    setStatus(`Подключено: ${device.name || DEVICE_NAME}`, 'on');
+    setMsg('');
+    ui.connect.textContent = 'Отключиться';
+    updateWakeLock();
+  } finally {
+    connecting = false;
+    render();
+  }
+}
+
+function onDisconnected() {
+  state.connected = false;
+  angleChar = null;
+  cmdChar = null;
+  updateWakeLock();
+  render();
+  if (userDisconnect) {
+    setStatus('Не подключено', '');
+    ui.connect.textContent = 'Подключиться';
+    return;
+  }
+  scheduleReconnect();
+}
+
+function scheduleReconnect() {
+  clearTimeout(reconnectTimer);
+  reconnectAttempt++;
+  const delay = Math.min(1000 * 2 ** (reconnectAttempt - 1), 15000);
+  setStatus(`Связь потеряна, переподключение через ${Math.round(delay / 1000)} с…`, 'busy');
+  ui.connect.textContent = 'Отменить';
+  reconnectTimer = setTimeout(async () => {
+    if (userDisconnect || !device) return;
+    try {
+      await connectGatt();
+    } catch (e) {
+      if (!userDisconnect) scheduleReconnect();
+    }
+  }, delay);
+}
+
+function attachDevice(d) {
+  if (device === d) return;
+  if (device) device.removeEventListener('gattserverdisconnected', onDisconnected);
+  device = d;
+  device.addEventListener('gattserverdisconnected', onDisconnected);
+}
+
+async function onConnectClick() {
+  // Кнопка работает как «Подключиться», «Отключиться» и «Отменить переподключение».
+  if (state.connected || reconnectTimer || connecting) {
+    userDisconnect = true;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    if (device && device.gatt.connected) {
+      device.gatt.disconnect();
+    } else {
+      onDisconnected();
+    }
+    return;
+  }
+
+  userDisconnect = false;
+  setMsg('');
+  try {
+    const d = await navigator.bluetooth.requestDevice({
+      filters: [{ name: DEVICE_NAME }, { services: [SVC_UUID] }],
+      optionalServices: [SVC_UUID, 'battery_service'],
+    });
+    attachDevice(d);
+    await connectGatt();
+  } catch (e) {
+    if (e && e.name === 'NotFoundError') {
+      setStatus('Не подключено', '');
+      setMsg('Устройство не выбрано. Включите датчик (удержание кнопки 1.5 с) и попробуйте снова.');
+    } else {
+      setStatus('Не подключено', '');
+      setMsg('Ошибка подключения: ' + (e && e.message ? e.message : e), true);
+      if (device && !userDisconnect) scheduleReconnect();
+    }
+  }
+}
+
+ui.connect.addEventListener('click', onConnectClick);
+
+ui.calibrate.addEventListener('click', async () => {
+  if (!cmdChar) return;
+  ui.calibrate.disabled = true;
+  try {
+    const data = new Uint8Array([CMD_CALIBRATE]);
+    if (cmdChar.writeValueWithResponse) {
+      await cmdChar.writeValueWithResponse(data);
+    } else {
+      await cmdChar.writeValue(data);
+    }
+    state.inTarget = false;
+    setMsg('Калибровка отправлена. Если светодиод мигнул три раза, нож двигался: повторите.');
+  } catch (e) {
+    setMsg('Не удалось откалибровать: ' + (e && e.message ? e.message : e), true);
+  } finally {
+    render();
+  }
+});
+
+/* После перезагрузки страницы: переподключиться к уже разрешённому датчику (если браузер умеет). */
+async function restorePreviousDevice() {
+  if (!navigator.bluetooth.getDevices) return;
+  try {
+    const list = await navigator.bluetooth.getDevices();
+    const d = list.find((x) => x.name === DEVICE_NAME);
+    if (!d) return;
+    attachDevice(d);
+    userDisconnect = false;
+    setStatus('Поиск датчика…', 'busy');
+    try {
+      await connectGatt();
+    } catch (e) {
+      scheduleReconnect();
+    }
+  } catch (e) {
+    /* getDevices недоступен или запрещён: обычное подключение кнопкой */
+  }
+}
+
+/* ---- Старт ---- */
+if (!('bluetooth' in navigator)) {
+  ui.unsupported.style.display = 'block';
+  ui.connect.disabled = true;
+  setStatus('Web Bluetooth недоступен', '');
+} else {
+  restorePreviousDevice();
+}
+
+setInterval(render, 500); // «нет данных», если notify перестали приходить
+render();
+</script>
+</body>
+</html>
