@@ -120,22 +120,67 @@ west build -p -b holyiot_21011 knife_sharpening/firmware/diag
 
 ## Заливка через ESP32_nRF52_SWD (atc1441)
 
+### Флэшер на ESP32-S3 SuperMini
+
+В `platformio.ini` оригинального флэшера есть только две конфигурации:
+- `ESP32_nRF52_SWD`: обычный ESP32 DevKit, SWD на GPIO 21/19;
+- `ESP32-S3_16MB_8R_nRF52_SWD`: ESP32-S3 DevKitC, SWD на GPIO 41/42, 16 МБ flash.
+
+У SuperMini выведены только GPIO 1–13 и 43/44, а flash у неё 4 МБ, так что ни одна не
+подходит. Добавьте в конец `platformio.ini` флэшера своё окружение:
+
+```ini
+[env:ESP32-S3_SuperMini_nRF52_SWD]
+board = esp32-s3-devkitc-1
+board_build.flash_size = 4MB
+board_upload.flash_size = 4MB
+board_build.partitions = partition_noOTA.csv   ; есть в репозитории флэшера, рассчитан на 4 МБ
+build_flags =
+    ; Serial через встроенный USB (на SuperMini нет отдельного USB-UART)
+    -D ARDUINO_USB_MODE=1
+    -D ARDUINO_USB_CDC_ON_BOOT=1
+    ; PINS
+    -D LED=48
+    -D LED_STATE_ON=LOW
+    -D GLITCHER=4        ; нужен только для обхода APPROTECT глитчем, нам не нужен
+    -D OSCI_PIN=5        ; то же
+    -D NRF_POWER=6       ; то же, не подключать
+    -D swd_clock_pin=7
+    -D swd_data_pin=8
+```
+
+Подойдут любые свободные GPIO из 1–13, кроме GPIO 3 (strapping-пин). GPIO 19/20 на S3
+заняты USB.
+
+Сборка и заливка флэшера (VS Code + PlatformIO):
+1. В `src/web.cpp` впишите `ssid` и `password` своей Wi-Fi сети.
+2. `pio run -e ESP32-S3_SuperMini_nRF52_SWD -t upload`. Если порт не находится, зажмите
+   BOOT, нажмите RESET, отпустите BOOT и повторите.
+3. Откройте монитор порта (`pio device monitor`, 115200): там будет IP. Также работает
+   адрес `http://swd.local/`.
+4. Откройте `http://swd.local/edit` (логин и пароль `admin`/`admin`), загрузите файл
+   `data/index.htm` из репозитория флэшера и обновите `http://swd.local/`.
+5. На странице `http://swd.local/pins` видно, на каких пинах реально работает SWD.
+   Если флэшер уже был собран раньше, назначенные пины проще всего узнать здесь.
+
 ### Подключение
 
-| nRF52 (площадки на плате) | ESP32-S3 |
+| nRF52 (площадки на плате) | ESP32-S3 SuperMini |
 |---|---|
-| SWDCLK (T4) | GPIO, указанный в `platformio.ini` флэшера как SWDCLK (по умолчанию 21) |
-| SWDIO (T3) | GPIO SWDIO (по умолчанию 19) |
+| SWDCLK (T4) | GPIO 7 (`swd_clock_pin`) |
+| SWDIO (T3) | GPIO 8 (`swd_data_pin`) |
 | GND (T2) | GND |
-| VDD (T1) | 3.3 V, **только если батарейка вынута** |
+| VDD (T1) | 3V3, **только если батарейка вынута** |
+
+Провода SWD должны быть короткими (до 10–15 см).
 
 > ⚠️ Нельзя одновременно подавать 3.3 В на VDD и держать CR2032 в держателе: внешние
-> 3.3 В пойдут в литиевую батарейку (её нельзя заряжать). Либо батарейка, либо 3.3 В
-> от ESP32, но не вместе.
+> 3.3 В пойдут в литиевую батарейку (её нельзя заряжать). Либо батарейка, либо 3V3
+> от SuperMini, но не вместе.
 
 ### Шаги в веб-интерфейсе флэшера
 
-1. Откройте `http://<IP ESP32>/` и нажмите **Init SWD**. В блоке «nRF info» должно
+1. Откройте `http://swd.local/` (или `http://<IP>/`) и нажмите **Init SWD**. В блоке «nRF info» должно
    появиться `Connected`, а размер flash должен быть 192 kB.
 2. Нажмите **Erase nRF**. Это полное стирание через CTRL-AP (ERASEALL): оно снимает
    APPROTECT и **навсегда удаляет заводскую прошивку Holyiot**, а также калибровку.
