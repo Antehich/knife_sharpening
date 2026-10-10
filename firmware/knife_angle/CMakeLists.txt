@@ -12,4 +12,5 @@ target_sources(app PRIVATE
   src/accel.c
   src/ble.c
   src/calib.c
+  src/filter.c
 )

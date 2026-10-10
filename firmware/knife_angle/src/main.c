@@ -30,11 +30,7 @@
 #include "app.h"
 #include "ble.h"
 #include "calib.h"
-
-/* Сглаживание: экспоненциальное скользящее среднее по вектору гравитации.
- * α = 1 − exp(−Δt/τ) при Δt = 40 мс (25 Гц) и τ = 80 мс: 95 % отклика за 3τ ≈ 0.24 с.
- */
-#define EMA_ALPHA 0.39f
+#include "filter.h"
 
 /* Допустимый модуль вектора при калибровке, mg: датчик должен лежать спокойно. */
 #define CALIB_MIN_MG 700.0f
@@ -221,8 +217,6 @@ static FUNC_NORETURN void power_off(bool confirm)
 /* Угол                                                                     */
 /* ------------------------------------------------------------------------ */
 
-static float filt[3];      /* сглаженный вектор гравитации, mg */
-static bool have_sample;
 static float ref[3] = { 0.0f, 0.0f, 1.0f }; /* без калибровки: ось Z датчика */
 static bool calibrated;
 static bool sensor_error;
@@ -241,27 +235,20 @@ static void process_samples(void)
 		return;
 	}
 	for (int i = 0; i < n; i++) {
-		for (int a = 0; a < 3; a++) {
-			if (!have_sample) {
-				filt[a] = buf[i][a];
-			} else {
-				filt[a] += EMA_ALPHA * ((float)buf[i][a] - filt[a]);
-			}
-		}
-		have_sample = true;
+		filter_add(buf[i]);
 	}
 }
 
 /* Угол между текущим вектором гравитации и опорным, 0..180°, в единицах 0.1°.
  * atan2(|r×g|, r·g) точнее, чем acos, при углах около 0° и 180°.
  */
-static int16_t angle_x10(void)
+static int16_t angle_x10(const float g[3])
 {
-	float cx = ref[1] * filt[2] - ref[2] * filt[1];
-	float cy = ref[2] * filt[0] - ref[0] * filt[2];
-	float cz = ref[0] * filt[1] - ref[1] * filt[0];
+	float cx = ref[1] * g[2] - ref[2] * g[1];
+	float cy = ref[2] * g[0] - ref[0] * g[2];
+	float cz = ref[0] * g[1] - ref[1] * g[0];
 	float cross = sqrtf(cx * cx + cy * cy + cz * cz);
-	float dot = ref[0] * filt[0] + ref[1] * filt[1] + ref[2] * filt[2];
+	float dot = ref[0] * g[0] + ref[1] * g[1] + ref[2] * g[2];
 
 	return (int16_t)lroundf(atan2f(cross, dot) * RAD_TO_DEG * 10.0f);
 }
@@ -270,24 +257,30 @@ static void publish_angle(void)
 {
 	uint8_t flags = (calibrated ? ANGLE_FLAG_CALIBRATED : 0) |
 			(sensor_error ? ANGLE_FLAG_SENSOR_ERROR : 0);
+	float g[3];
 
-	ble_set_angle(have_sample ? angle_x10() : 0, flags);
+	ble_set_angle(filter_get(g) ? angle_x10(g) : 0, flags);
 }
 
 static void calibrate(void)
 {
 	float m;
+	float g[3];
 	float v[3];
 
 	process_samples(); /* взять самые свежие отсчёты из FIFO */
 
-	m = sqrtf(filt[0] * filt[0] + filt[1] * filt[1] + filt[2] * filt[2]);
-	if (!have_sample || sensor_error || m < CALIB_MIN_MG || m > CALIB_MAX_MG) {
+	if (sensor_error || !filter_get(g)) {
+		led_flash(3, 40, 80);
+		return;
+	}
+	m = sqrtf(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
+	if (m < CALIB_MIN_MG || m > CALIB_MAX_MG) {
 		led_flash(3, 40, 80);
 		return;
 	}
 	for (int a = 0; a < 3; a++) {
-		v[a] = filt[a] / m;
+		v[a] = g[a] / m;
 	}
 	if (calib_save(v) != 0) {
 		led_flash(3, 40, 80);
