@@ -33,6 +33,9 @@ function check(name, cond, info) { console.log((cond ? 'PASS ' : 'FAIL ') + name
   const log1 = await page.evaluate(() => __btlog);
   check('requestDevice filters by name + service', log1[0].includes('KnifeAngle') && log1[0].includes('8c900001'), log1);
 
+  check('smoothing on by default', await page.isChecked('#optSmooth'), null);
+  // Проверки порогов ниже на точных значениях: без сглаживания.
+  await page.uncheck('#optSmooth');
   s = await send(12.3, 0);
   check('uncalibrated: gray + message', s.cls === 'st-gray' && s.hint.startsWith('Сначала откалибруй') && s.angle === '12.3°' && s.delta === '', s);
   await page.waitForTimeout(400); await page.screenshot({ path: OUT + '/1-uncalibrated.png' });
@@ -80,6 +83,21 @@ function check(name, cond, info) { console.log((cond ? 'PASS ' : 'FAIL ') + name
   check('+ button: 20.5', s.target === '20.5', s);
   const saved = await page.evaluate(() => localStorage.getItem('knifeAngle.settings.v1'));
   check('settings saved', saved && JSON.parse(saved).target === 20.5 && JSON.parse(saved).tol === 0.5, saved);
+
+  // сглаживание при штрихах: угол 20° ± 10° с частотой 1.2 Гц, notify 5 раз в секунду
+  await page.check('#optSmooth');
+  const strokes = Array.from({ length: 50 }, (_, i) => 20 + 10 * Math.sin(2 * Math.PI * 1.2 * i * 0.2 + 0.3));
+  const shown = [];
+  for (const v of strokes) shown.push(parseFloat((await send(Math.round(v * 10) / 10, 1)).angle));
+  const tail = shown.slice(25);
+  check('smoothing: strokes averaged to 20 ± 1', Math.max(...tail.map((x) => Math.abs(x - 20))) <= 1, tail);
+  for (let i = 0; i < 15; i++) s = await send(18, 1);
+  check('smoothing: settles after strokes stop', Math.abs(parseFloat(s.angle) - 18) <= 0.2, s);
+  await page.uncheck('#optSmooth');
+  s = await send(21, 1);
+  check('smoothing off: raw value', s.angle === '21.0°', s);
+  const savedSmooth = await page.evaluate(() => JSON.parse(localStorage.getItem('knifeAngle.settings.v1')).smooth);
+  check('smoothing setting saved', savedSmooth === false, savedSmooth);
 
   // калибровка
   await page.click('#calibrate'); await page.waitForTimeout(50);

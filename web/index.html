@@ -261,6 +261,7 @@
     <label><input type="checkbox" id="optSound"> Звук при входе в цель</label>
     <label><input type="checkbox" id="optVibro"> Вибрация</label>
     <label><input type="checkbox" id="optWake"> Не гасить экран</label>
+    <label><input type="checkbox" id="optSmooth"> Сглаживание при штрихах</label>
   </div>
   <div class="msg" id="msg"></div>
 </section>
@@ -281,7 +282,7 @@ const FLAG_SENSOR_ERROR = 0x02;
 const HYSTERESIS = 0.3;   // выход из цели при |Δ| > допуск + 0.3°
 const NEAR_ZONE = 3;      // «близко»: до 3° за пределами допуска
 const STALE_MS = 1500;    // нет notify дольше: данные устарели
-const DEFAULTS = { target: 15, tol: 1, sound: false, vibro: false, wake: false };
+const DEFAULTS = { target: 15, tol: 1, sound: false, vibro: false, wake: false, smooth: true };
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -289,7 +290,7 @@ const ui = {
   angle: $('angle'), arrow: $('arrow'), hintText: $('hintText'), delta: $('delta'),
   targetLine: $('targetLine'), target: $('target'), tol: $('tol'), presets: $('presets'),
   calibrate: $('calibrate'), optSound: $('optSound'), optVibro: $('optVibro'),
-  optWake: $('optWake'), msg: $('msg'), unsupported: $('unsupported'),
+  optWake: $('optWake'), optSmooth: $('optSmooth'), msg: $('msg'), unsupported: $('unsupported'),
 };
 
 /* ---- Настройки в localStorage (страница работает и без него) ---- */
@@ -308,6 +309,7 @@ function loadSettings() {
   s.sound = !!s.sound;
   s.vibro = !!s.vibro;
   s.wake = !!s.wake;
+  s.smooth = !!s.smooth;
   return s;
 }
 
@@ -333,6 +335,42 @@ function round1(v) {
 }
 
 const settings = loadSettings();
+
+/* ---- Сглаживание при штрихах ----
+ * Датчик меряет гравитацию вместе с ускорением, и при штрихе по камню угол гуляет
+ * на 10–20°. За несколько штрихов ускорение в среднем почти нулевое, поэтому:
+ *   slow: два последовательных экспоненциальных средних по τ = 1 с (штрихи гасятся);
+ *   var:  разброс угла за ~0.5 с.
+ * Показываем slow + k·(угол − slow), k = ε²/(var + ε²), ε = 1.5°: в покое k ≈ 1 и
+ * угол без задержки, при штрихах k → 0 и показывается среднее.
+ * Это слабее фильтра в новой прошивке (filter.c): здесь есть только готовый угол
+ * 5 раз в секунду, без направлений. Штрихи поперёк лезвия гасятся почти полностью,
+ * а вдоль лезвия, по диагонали или кругами угол в среднем завышается на 2–4°.
+ */
+const SMOOTH_DT = 0.2;                                  // notify раз в 200 мс
+const SMOOTH_A_SLOW = 1 - Math.exp(-SMOOTH_DT / 1.0);   // τ = 1 с
+const SMOOTH_A_VAR = 1 - Math.exp(-SMOOTH_DT / 0.5);    // τ = 0.5 с
+const SMOOTH_EPS2 = 1.5 * 1.5;
+
+const smoother = {
+  init: false, s1: 0, s2: 0, mean: 0, variance: 0,
+  reset() { this.init = false; },
+  add(v) {
+    if (!this.init) {
+      this.s1 = this.s2 = this.mean = v;
+      this.variance = 0;
+      this.init = true;
+      return v;
+    }
+    this.s1 += SMOOTH_A_SLOW * (v - this.s1);
+    this.s2 += SMOOTH_A_SLOW * (this.s1 - this.s2);
+    const d = v - this.mean;
+    this.mean += SMOOTH_A_VAR * d;
+    this.variance = (1 - SMOOTH_A_VAR) * (this.variance + SMOOTH_A_VAR * d * d);
+    const k = SMOOTH_EPS2 / (this.variance + SMOOTH_EPS2);
+    return this.s2 + k * (v - this.s2);
+  },
+};
 
 /* ---- Состояние ---- */
 const state = {
@@ -528,11 +566,13 @@ ui.presets.addEventListener('click', (e) => {
   if (b) applyTarget(b.dataset.v);
 });
 
-for (const [el, key] of [[ui.optSound, 'sound'], [ui.optVibro, 'vibro'], [ui.optWake, 'wake']]) {
+for (const [el, key] of [[ui.optSound, 'sound'], [ui.optVibro, 'vibro'], [ui.optWake, 'wake'],
+  [ui.optSmooth, 'smooth']]) {
   el.checked = settings[key];
   el.addEventListener('change', () => {
     settings[key] = el.checked;
     saveSettings();
+    if (key === 'smooth') smoother.reset();
     if (key === 'sound' && el.checked) {
       unlockAudio();
       beep();
@@ -559,9 +599,14 @@ let connecting = false;
 function onAngleChanged(event) {
   const v = event.target.value;
   if (v.byteLength < 3) return;
-  state.angle = v.getInt16(0, true) / 10;
-  state.flags = v.getUint8(2);
-  state.lastUpdate = performance.now();
+  const raw = v.getInt16(0, true) / 10;
+  const flags = v.getUint8(2);
+  const now = performance.now();
+  // Сначала с нуля: после паузы в данных и после калибровки (угол скачком меняется).
+  if (now - state.lastUpdate > STALE_MS || (flags ^ state.flags) & FLAG_CALIBRATED) smoother.reset();
+  state.angle = settings.smooth ? smoother.add(raw) : raw;
+  state.flags = flags;
+  state.lastUpdate = now;
   render();
 }
 
@@ -699,6 +744,7 @@ ui.calibrate.addEventListener('click', async () => {
       await cmdChar.writeValue(data);
     }
     state.inTarget = false;
+    smoother.reset();
     setMsg('Калибровка отправлена. Если светодиод мигнул три раза, нож двигался: повторите.');
   } catch (e) {
     setMsg('Не удалось откалибровать: ' + (e && e.message ? e.message : e), true);
